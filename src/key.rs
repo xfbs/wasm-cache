@@ -1,6 +1,10 @@
+//! Arbitrary cache keys.
 use super::Invalidatable;
 use std::{any::Any, cmp::Ordering, fmt::Debug};
 
+/// Trait for arbitrary cache keys.
+///
+/// Cache keys are arbitrary Rust types that are sortable and comparable.
 pub trait CacheKey<M = ()>: Debug + Invalidatable<M> + 'static {
     fn any(&self) -> &(dyn Any + 'static);
     fn any_eq(&self, other: &dyn Any) -> bool;

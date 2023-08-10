@@ -1,5 +1,15 @@
+//! Dynamic values.
+//!
+//! This module contains a dynamic value type that is agnostic over the storage container,
+//! [`Value`]. It also contains aliases and implementations for [`RcValue`] and [`ArcValue`], which
+//! use the [`Rc`] and [`Arc`] reference-counted containers, respectively.
 use std::{any::Any, rc::Rc, sync::Arc};
 
+/// Dynamic value.
+///
+/// Cache values are dynamic, but need to be able to be cast into a concrete type. The [`Value`]
+/// type helps here. By default, it contains a `dyn Any`, so is able to store any type of data. It
+/// is able to be cast into a concrete type. It also contains as state the validity of the type.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Value<T> {
     /// Valid means the data is usable.
@@ -46,6 +56,7 @@ impl<T> Default for Value<T> {
 }
 
 impl<T> Value<T> {
+    /// Create new value with the given data.
     pub fn new(data: T) -> Self {
         Self {
             data: Some(data),
@@ -53,14 +64,17 @@ impl<T> Value<T> {
         }
     }
 
+    /// Return an option with a reference to the data.
     pub fn data(&self) -> Option<&T> {
         self.data.as_ref()
     }
 
+    /// Determine if this data is valid.
     pub fn valid(&self) -> bool {
         self.valid
     }
 
+    /// Invalidate this data.
     pub fn invalidate(&mut self) {
         self.valid = false;
     }

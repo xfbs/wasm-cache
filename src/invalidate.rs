@@ -1,3 +1,5 @@
+//! Traits to handle invalidations.
+
 /// Something which can be invalidated.
 pub trait Invalidatable<M> {
     fn invalidated_by(&self, _mutation: &M) -> bool {
