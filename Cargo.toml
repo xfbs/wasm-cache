@@ -1,13 +1,19 @@
 [package]
-name = "yew-cache"
+name = "wasm-cache"
 version = "0.1.0"
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+authors = ["Patrick Elsen <pelsen@xfbs.net>"]
+license = "MIT"
+description = "Request cache for Rust browser WASM applications"
+repository = "https://github.com/xfbs/wasm-cache"
 
 [dependencies]
-async-trait = "0.1.72"
-log = "0.4.19"
-prokio = "0.1.0"
-wasm-bindgen-futures = "0.4.37"
-yew = "0.20.0"
+async-trait = { version = "0.1.72", optional = true }
+log = { version = "0.4.19", optional = true }
+prokio = { version = "0.1.0", optional = true }
+wasm-bindgen-futures = { version = "0.4.37", optional = true }
+yew = { version = "0.20.0", optional = true }
+
+[features]
+yew = ["dep:yew", "dep:prokio", "dep:async-trait"]
+log = ["dep:log"]

@@ -238,7 +238,6 @@ pub struct CacheProviderProps {
 
 #[function_component]
 pub fn CacheProvider(props: &CacheProviderProps) -> Html {
-    log::debug!("Creating new cache");
     let state = use_state(Cache::default);
     let context: Cache = (*state).clone();
     html! {
@@ -253,6 +252,7 @@ pub fn use_cached<R: CacheItem>(data: R) -> RcValue<R::Value>
 where
     R::Value: PartialEq,
 {
+    #[cfg(feature = "log")]
     log::debug!("use_data({data:?})");
     let cache = use_context::<Cache>().expect("Cache not present");
     let state = use_state(|| RcValue::default());
