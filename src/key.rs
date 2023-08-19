@@ -9,32 +9,32 @@ pub trait CacheKey<M = ()>: Debug + Invalidatable<M> + 'static {
     fn any(&self) -> &(dyn Any + 'static);
     fn any_eq(&self, other: &dyn Any) -> bool;
     fn any_ord(&self, other: &dyn Any) -> Ordering;
-    fn clone_boxed(&self) -> Box<dyn CacheKey>;
+    fn clone_boxed(&self) -> Box<dyn CacheKey<M>>;
 }
 
-impl PartialOrd<Self> for dyn CacheKey {
-    fn partial_cmp(&self, other: &dyn CacheKey) -> Option<Ordering> {
+impl<M: 'static> PartialOrd<Self> for dyn CacheKey<M> {
+    fn partial_cmp(&self, other: &dyn CacheKey<M>) -> Option<Ordering> {
         Some(self.any_ord(other.any()))
     }
 }
 
-impl PartialEq<Self> for dyn CacheKey {
-    fn eq(&self, other: &dyn CacheKey) -> bool {
+impl<M: 'static> PartialEq<Self> for dyn CacheKey<M> {
+    fn eq(&self, other: &dyn CacheKey<M>) -> bool {
         self.any_eq(other.any())
     }
 }
 
-impl Eq for dyn CacheKey {}
+impl<M: 'static> Eq for dyn CacheKey<M> {}
 
-impl Ord for dyn CacheKey {
-    fn cmp(&self, other: &dyn CacheKey) -> Ordering {
+impl<M: 'static> Ord for dyn CacheKey<M> {
+    fn cmp(&self, other: &dyn CacheKey<M>) -> Ordering {
         self.any_ord(other.any())
     }
 }
 
-impl Clone for Box<dyn CacheKey> {
+impl<M: 'static> Clone for Box<dyn CacheKey<M>> {
     fn clone(&self) -> Self {
-        self.clone_boxed()
+        ((&**self) as &dyn CacheKey<M>).clone_boxed()
     }
 }
 
@@ -63,7 +63,7 @@ impl<M, T: Debug + Eq + Ord + Any + Clone + Invalidatable<M> + 'static> CacheKey
         self as &(dyn Any + 'static)
     }
 
-    fn clone_boxed(&self) -> Box<dyn CacheKey> {
+    fn clone_boxed(&self) -> Box<dyn CacheKey<M>> {
         Box::new(self.clone())
     }
 }

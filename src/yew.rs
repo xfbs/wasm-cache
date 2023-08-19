@@ -72,7 +72,7 @@ impl Entry {
 /// The cached data here can be anything, but typically is a network request. The resulting value
 /// is typically the response type of the network request.
 #[async_trait(?Send)]
-pub trait CacheItem: CacheKey + Clone + Ord {
+pub trait CacheItem<M = ()>: CacheKey<M> + Clone + Ord {
     type Value: Clone + Debug + PartialEq + 'static;
     type Error: Debug + Error + 'static;
 
@@ -84,29 +84,29 @@ pub trait CacheItem: CacheKey + Clone + Ord {
 }
 
 #[derive(Clone, Default)]
-pub struct BTreeCache {
-    pub entries: BTreeMap<Box<dyn CacheKey>, Entry>,
+pub struct BTreeCache<M: 'static = ()> {
+    pub entries: BTreeMap<Box<dyn CacheKey<M>>, Entry>,
 }
 
 #[derive(Clone, Default)]
-pub struct Cache {
-    pub cache: Rc<Mutex<BTreeCache>>,
+pub struct Cache<M: 'static = ()> {
+    pub cache: Rc<Mutex<BTreeCache<M>>>,
 }
 
-impl PartialEq for Cache {
+impl<M: 'static> PartialEq for Cache<M> {
     fn eq(&self, other: &Self) -> bool {
         Rc::ptr_eq(&self.cache, &other.cache)
     }
 }
 
-impl BTreeCache {
+impl<M: 'static> BTreeCache<M> {
     /// Unsubscribe to the value of this data.
-    pub fn mutate<T: CacheKey, R, F: FnOnce(&mut Entry) -> R>(
+    pub fn mutate<T: CacheKey<M>, R, F: FnOnce(&mut Entry) -> R>(
         &mut self,
         data: &T,
         mutate: F,
     ) -> Option<R> {
-        if let Some(entry) = self.entries.get_mut(data as &dyn CacheKey) {
+        if let Some(entry) = self.entries.get_mut(data as &dyn CacheKey<M>) {
             Some(mutate(entry))
         } else {
             None
@@ -114,20 +114,20 @@ impl BTreeCache {
     }
 
     /// Unsubscribe to the value of this data.
-    pub fn mutate_all<F: Fn(&Box<dyn CacheKey>, &mut Entry)>(&mut self, mutate: F) {
+    pub fn mutate_all<F: Fn(&Box<dyn CacheKey<M>>, &mut Entry)>(&mut self, mutate: F) {
         for (key, entry) in &mut self.entries {
             mutate(key, entry);
         }
     }
 
     /// Unsubscribe to the value of this data.
-    pub fn insert<T: CacheKey>(&mut self, data: T, entry: Entry) {
+    pub fn insert<T: CacheKey<M>>(&mut self, data: T, entry: Entry) {
         let key = Box::new(data);
         self.entries.insert(key, entry);
     }
 
-    pub fn get<T: CacheKey>(&self, data: &T) -> Option<&Entry> {
-        self.entries.get(data as &dyn CacheKey)
+    pub fn get<T: CacheKey<M>>(&self, data: &T) -> Option<&Entry> {
+        self.entries.get(data as &dyn CacheKey<M>)
     }
 }
 
