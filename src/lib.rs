@@ -7,9 +7,10 @@
 /// It is intended to be used with the Yew framework, although more integrations may be added in
 /// the future.
 mod invalidate;
+mod item;
 mod key;
 mod value;
 #[cfg(feature = "yew")]
-mod yew;
+pub mod yew;
 
-pub use crate::{invalidate::*, key::*, value::*};
+pub use crate::{invalidate::*, item::*, key::*, value::*};

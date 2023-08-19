@@ -1,9 +1,6 @@
-use crate::{CacheKey, RcValue};
-use async_trait::async_trait;
+use crate::{CacheItem, CacheKey, RcValue};
 use prokio::time::sleep;
-use std::{
-    any::Any, collections::BTreeMap, error::Error, fmt::Debug, rc::Rc, sync::Mutex, time::Duration,
-};
+use std::{any::Any, collections::BTreeMap, rc::Rc, sync::Mutex, time::Duration};
 use yew::{
     functional::{UseStateHandle, UseStateSetter},
     prelude::*,
@@ -63,34 +60,44 @@ impl Entry {
     }
 }
 
-/// Represents some action that can be cached.
-///
-/// The action has one associated type called [`Value`]. This is the value of data that this action
-/// returns. That data is cached, so that future invocations of this item can reuse the previously
-/// computed data.
-///
-/// The cached data here can be anything, but typically is a network request. The resulting value
-/// is typically the response type of the network request.
-#[async_trait(?Send)]
-pub trait CacheItem<M = ()>: CacheKey<M> + Clone + Ord {
-    type Value: Clone + Debug + PartialEq + 'static;
-    type Error: Debug + Error + 'static;
-
-    async fn send(&self) -> Result<Self::Value, ()>;
-
-    fn superset(&self) -> Vec<Self> {
-        vec![]
-    }
-}
-
-#[derive(Clone, Default)]
 pub struct BTreeCache<M: 'static = ()> {
     pub entries: BTreeMap<Box<dyn CacheKey<M>>, Entry>,
 }
 
-#[derive(Clone, Default)]
+impl<M: 'static> Clone for BTreeCache<M> {
+    fn clone(&self) -> Self {
+        Self {
+            entries: self.entries.clone(),
+        }
+    }
+}
+
+impl<M: 'static> Default for BTreeCache<M> {
+    fn default() -> Self {
+        Self {
+            entries: Default::default(),
+        }
+    }
+}
+
 pub struct Cache<M: 'static = ()> {
     pub cache: Rc<Mutex<BTreeCache<M>>>,
+}
+
+impl<M: 'static> Clone for Cache<M> {
+    fn clone(&self) -> Self {
+        Self {
+            cache: self.cache.clone(),
+        }
+    }
+}
+
+impl<M: 'static> Default for Cache<M> {
+    fn default() -> Self {
+        Self {
+            cache: Default::default(),
+        }
+    }
 }
 
 impl<M: 'static> PartialEq for Cache<M> {
@@ -131,8 +138,8 @@ impl<M: 'static> BTreeCache<M> {
     }
 }
 
-impl Cache {
-    fn subscribe<R: CacheItem>(&self, request: &R, handle: UseStateHandle<RcValue>)
+impl<M: 'static> Cache<M> {
+    fn subscribe<R: CacheItem<M>>(&self, request: &R, handle: UseStateHandle<RcValue>)
     where
         R::Value: PartialEq,
     {
@@ -176,7 +183,7 @@ impl Cache {
     }
 
     /// Trigger a fetch of this data.
-    fn fetch<T: CacheItem>(&self, data: &T, delay: Option<Duration>) {
+    fn fetch<T: CacheItem<M>>(&self, data: &T, delay: Option<Duration>) {
         let data = data.clone();
         let cache = self.clone();
         wasm_bindgen_futures::spawn_local(async move {
@@ -190,8 +197,10 @@ impl Cache {
         });
     }
 
-    /// Cache this data.
-    pub fn failure<T: CacheItem>(&self, data: &T, error: ()) {
+    /// Handle failure.
+    pub fn failure<T: CacheItem<M>>(&self, data: &T, error: T::Error) {
+        #[cfg(feature = "log")]
+        log::error!("error fetching {data:?}: {error}");
         self.cache
             .lock()
             .expect("Failure to lock cache")
@@ -203,7 +212,7 @@ impl Cache {
     }
 
     /// Cache this data.
-    pub fn cache<T: CacheItem>(&self, data: &T, value: Rc<T::Value>) {
+    pub fn cache<T: CacheItem<M>>(&self, data: &T, value: Rc<T::Value>) {
         self.cache
             .lock()
             .expect("Failure to lock cache")
@@ -216,7 +225,7 @@ impl Cache {
     }
 
     /// Unsubscribe to the value of this data.
-    pub fn unsubscribe<T: CacheItem>(&self, data: &T, setter: &UseStateSetter<RcValue>) {
+    pub fn unsubscribe<T: CacheItem<M>>(&self, data: &T, setter: &UseStateSetter<RcValue>) {
         self.cache
             .lock()
             .expect("Failure to lock cache")
@@ -225,8 +234,21 @@ impl Cache {
             });
     }
 
-    /// Invalidate this data.
-    pub fn invalidate<T: CacheItem>(&self, data: &T) {
+    /// Invalidate this invalidation.
+    pub fn invalidate(&self, mutation: &M) {
+        self.cache
+            .lock()
+            .expect("Failure to lock cache")
+            .mutate_all(|key, entry| {
+                if key.invalidated_by(mutation) {
+                    entry.value.invalidate();
+                    entry.broadcast();
+                }
+            });
+    }
+
+    /// Invalidate this key.
+    pub fn invalidate_key<T: CacheItem<M>>(&self, data: &T) {
         self.cache
             .lock()
             .expect("Failure to lock cache")
@@ -236,7 +258,7 @@ impl Cache {
             });
     }
 
-    /// FIXME: invalidates entire cache.
+    /// Invalidates entire cache.
     pub fn invalidate_all(&self) {
         let mut cache = self.cache.lock().expect("Failure to lock cache");
         cache.mutate_all(|_key, entry| {
@@ -246,30 +268,36 @@ impl Cache {
     }
 }
 
-#[derive(Properties, PartialEq)]
-pub struct CacheProviderProps {
+#[derive(Properties)]
+pub struct CacheProviderProps<M: 'static = ()> {
     pub children: Children,
+    #[prop_or_default]
+    pub cache: Cache<M>,
+}
+
+impl<M: 'static> PartialEq<Self> for CacheProviderProps<M> {
+    fn eq(&self, other: &Self) -> bool {
+        self.children.eq(&other.children) && self.cache.eq(&other.cache)
+    }
 }
 
 #[function_component]
-pub fn CacheProvider(props: &CacheProviderProps) -> Html {
-    let state = use_state(Cache::default);
-    let context: Cache = (*state).clone();
+pub fn CacheProvider<M: 'static = ()>(props: &CacheProviderProps<M>) -> Html {
     html! {
-        <ContextProvider<Cache> {context}>
+        <ContextProvider<Cache<M>> context={props.cache.clone()}>
         { for props.children.iter() }
-        </ContextProvider<Cache>>
+        </ContextProvider<Cache<M>>>
     }
 }
 
 #[hook]
-pub fn use_cached<R: CacheItem>(data: R) -> RcValue<R::Value>
+pub fn use_cached<M: 'static, R: CacheItem<M>>(data: R) -> RcValue<R::Value>
 where
     R::Value: PartialEq,
 {
     #[cfg(feature = "log")]
     log::debug!("use_data({data:?})");
-    let cache = use_context::<Cache>().expect("Cache not present");
+    let cache = use_context::<Cache<M>>().expect("Cache not present");
     let state = use_state(|| RcValue::default());
     let state_clone = state.clone();
     use_effect(move || {
