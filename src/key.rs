@@ -73,10 +73,12 @@ mod tests {
     use super::*;
     use std::collections::BTreeMap;
 
+    impl Invalidatable<()> for String {}
+    impl Invalidatable<()> for Vec<usize> {}
+
     #[test]
     fn cache_item_eq_identity() {
         let string: Box<dyn CacheKey> = Box::new(String::from("Hello"));
-        assert_eq!(string.any_eq(&string), true);
         assert!(&string == &string);
     }
 
@@ -85,8 +87,8 @@ mod tests {
         println!("Running test");
         let string1: Box<dyn CacheKey> = Box::new(String::from("Hello"));
         let string2: Box<dyn CacheKey> = Box::new(String::from("Hello"));
-        assert_eq!(string1.any_eq(&string2), true);
         assert!(&string1 == &string2);
+        assert!(string1 == string2);
     }
 
     #[test]
@@ -94,6 +96,7 @@ mod tests {
         let string_hello: Box<dyn CacheKey> = Box::new(String::from("Hello"));
         let string_world: Box<dyn CacheKey> = Box::new(String::from("World"));
         assert_eq!(string_hello.any_eq(&string_world), false);
+        assert!(string_hello != string_world);
     }
 
     #[test]

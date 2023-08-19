@@ -7,8 +7,6 @@ pub trait Invalidatable<M> {
     }
 }
 
-impl<T> Invalidatable<()> for T {}
-
 /// Something which produces invalidations.
 pub trait Invalidator<M> {
     fn mutations(&self) -> Vec<M>;
