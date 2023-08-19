@@ -11,7 +11,7 @@ repository = "https://github.com/xfbs/wasm-cache"
 async-trait = { version = "0.1.72" }
 futures = { version = "0.3.28", optional = true }
 gloo-net = { version = "0.4.0", optional = true }
-log = { version = "0.4.19", optional = true }
+log = { version = "0.4.19" }
 prokio = { version = "0.1.0", optional = true }
 serde = { version = "1.0.183", optional = true }
 serde_json = { version = "1.0.105", optional = true }
@@ -20,5 +20,4 @@ yew = { version = "0.20.0", optional = true }
 
 [features]
 yew = ["dep:yew", "dep:prokio", "dep:wasm-bindgen-futures"]
-log = ["dep:log"]
 websocket = ["dep:gloo-net", "dep:wasm-bindgen-futures", "dep:futures", "dep:serde", "dep:serde_json"]

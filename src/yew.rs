@@ -206,7 +206,6 @@ impl<M: 'static> Cache<M> {
 
     /// Handle failure.
     pub fn failure<T: CacheItem<M>>(&self, data: &T, error: T::Error) {
-    #[cfg(feature = "log")]
     log::error!("error fetching {data:?}: {error}");
         self.cache
             .lock()
@@ -326,7 +325,7 @@ mod websocket {
                             }
                         };
 
-                        log::info!("WebSocket mutation: {mutation:?}");
+                        log::debug!("WebSocket mutation: {mutation:?}");
 
                         cache.invalidate(&mutation);
                     }
@@ -363,7 +362,6 @@ pub fn use_cached<M: 'static, R: CacheItem<M>>(data: R) -> RcValue<R::Value>
 where
     R::Value: PartialEq,
 {
-    #[cfg(feature = "log")]
     log::debug!("use_data({data:?})");
     let cache = use_context::<Cache<M>>().expect("Cache not present");
     let state = use_state(|| RcValue::default());
