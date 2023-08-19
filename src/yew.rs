@@ -1,6 +1,8 @@
-use crate::{CacheItem, CacheKey, RcValue};
+use crate::{CacheKey, RcValue, CacheItem};
 use prokio::time::sleep;
-use std::{any::Any, collections::BTreeMap, rc::Rc, sync::Mutex, time::Duration};
+use std::{
+    any::Any, collections::BTreeMap, rc::Rc, sync::Mutex, time::Duration,
+};
 use yew::{
     functional::{UseStateHandle, UseStateSetter},
     prelude::*,
@@ -9,7 +11,7 @@ use yew::{
 const DELAY_INITIAL: Duration = Duration::from_millis(100);
 const DELAY_MULTIPLIER: f64 = 1.5;
 
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Debug)]
 pub struct Entry {
     /// Delay to use for next request
     pub delay: Option<Duration>,
@@ -165,7 +167,7 @@ impl<M: 'static> Cache<M> {
                 cache.insert(
                     request.clone(),
                     Entry {
-                        progress: true,
+                        progress: false,
                         subscriptions: vec![setter.clone()],
                         ..Default::default()
                     },
@@ -174,6 +176,7 @@ impl<M: 'static> Cache<M> {
                 self.fetch(request, None);
             }
             Some(entry) if entry.needs_fetch() => {
+                log::debug!("{entry:?}");
                 let delay = entry.delay;
                 drop(cache);
                 self.fetch(request, delay);
@@ -184,6 +187,10 @@ impl<M: 'static> Cache<M> {
 
     /// Trigger a fetch of this data.
     fn fetch<T: CacheItem<M>>(&self, data: &T, delay: Option<Duration>) {
+        let mut cache = self.cache.lock().expect("Failure to lock cache");
+        cache.mutate(data, |entry| {
+            entry.progress = true
+        });
         let data = data.clone();
         let cache = self.clone();
         wasm_bindgen_futures::spawn_local(async move {
@@ -199,8 +206,8 @@ impl<M: 'static> Cache<M> {
 
     /// Handle failure.
     pub fn failure<T: CacheItem<M>>(&self, data: &T, error: T::Error) {
-        #[cfg(feature = "log")]
-        log::error!("error fetching {data:?}: {error}");
+    #[cfg(feature = "log")]
+    log::error!("error fetching {data:?}: {error}");
         self.cache
             .lock()
             .expect("Failure to lock cache")
@@ -265,6 +272,67 @@ impl<M: 'static> Cache<M> {
             entry.value.invalidate();
             entry.broadcast();
         });
+    }
+}
+
+#[cfg(feature = "websocket")]
+mod websocket {
+    use super::*;
+    use serde::de::DeserializeOwned;
+    use std::{time::Duration, fmt::Debug};
+    use gloo_net::websocket::{Message, futures::WebSocket};
+    use futures::StreamExt;
+
+    impl<M: 'static + DeserializeOwned + Debug> Cache<M> {
+        pub fn websocket_listener(&self, url: &str) {
+            let url = url.to_string();
+            let cache = self.clone();
+            wasm_bindgen_futures::spawn_local(async move {
+                let mut first = true;
+                loop {
+                    if !first {
+                        prokio::time::sleep(Duration::from_secs(1)).await;
+                    } else {
+                        first = false;
+                    }
+
+                    let mut websocket = match WebSocket::open(&url) {
+                        Ok(websocket) => websocket,
+                        Err(error) => {
+                            log::error!("Error in WebSocket: {error}");
+                            continue;
+                        }
+                    };
+
+                    while let Some(message) = websocket.next().await {
+                        let message = match message {
+                            Ok(message) => message,
+                            Err(error) => {
+                                log::error!("Error in WebSocket: {error}");
+                                continue;
+                            },
+                        };
+
+                        let text = match message {
+                            Message::Text(text) => text,
+                            _ => unreachable!(),
+                        };
+
+                        let mutation: M = match serde_json::from_str(&text) {
+                            Ok(message) => message,
+                            Err(error) => {
+                                log::error!("Error in WebSocket: {error}");
+                                continue;
+                            }
+                        };
+
+                        log::info!("WebSocket mutation: {mutation:?}");
+
+                        cache.invalidate(&mutation);
+                    }
+                }
+            });
+        }
     }
 }
 
